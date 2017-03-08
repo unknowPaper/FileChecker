@@ -1,0 +1,30 @@
+mode: TEST
+addr: localhost
+port: 8080
+enable: true
+pubdir: static
+LARGE: BIG
+db:
+  Sqldriver: MySQL
+  Protocol: tcp
+  Hostname: localhost
+  Username: root
+  Password: 123456
+  Dbname: test
+  Charset: utf8
+  enable: true
+  disable: false
+  port: 3306
+  isTest: "true"
+  isTrue: "F"
+  isFalse: 1
+  timeout: 0
+  average: 2.0
+  coverage: 2.1
+  gpa: "3.7"
+  floatzero: 0.0
+  sint: "2000"
+First:
+  Second:
+    Third:
+      Value: Test

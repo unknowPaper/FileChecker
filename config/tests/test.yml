@@ -1,0 +1,17 @@
+mode: TEST
+listenaddr: localhost
+port: 8080
+pubdir: static
+LARGE: BIG
+db:
+    Sqldriver: MySQL
+    Protocol: tcp
+    Hostname: localhost
+    Username: root
+    Password: 123456
+    Dbname: test
+    Charset: utf8
+First:
+    Second:
+        Third:
+            Value: Test

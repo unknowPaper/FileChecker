@@ -1,0 +1,3 @@
+mode: ONLINE
+listenaddr: localhost
+listenport: 1234
