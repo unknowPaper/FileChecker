@@ -474,13 +474,15 @@ func getContentWithMD5(path string) (md5, content string) {
 	}
 	defer f.Close()
 
-	var re = regexp.MustCompile("^.*(" + strings.Join(diffFileExtension, "|") + ")$")
+	content = ""
+	if len(diffFileExtension) != 0 {
+		var re = regexp.MustCompile("^.*(" + strings.Join(diffFileExtension, "|") + ")$")
 
-	if re.MatchString(path) {
-		content = getContent(f)
-	} else {
-		content = ""
+		if re.MatchString(path) {
+			content = getContent(f)
+		}
 	}
+
 
 	f.Seek(0, 0)
 	md5 = genMd5(f)
