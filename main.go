@@ -124,32 +124,46 @@ func main() {
 	}
 
 	app.Before = func(c *cli.Context) error {
-		if c.Command.Name != "" {
-			// read config
-			cfg := c.GlobalString("cfg")
-			if err := readConfig(cfg); err != nil {
+
+		// read config
+		cfg := c.GlobalString("cfg")
+		if err := readConfig(cfg); err != nil {
+			if len(c.Args()) != 0 {
 				fmt.Println("Warning: Read config failed! you can use -cfg flag to set config location")
-			}
-
-			// create log
-			log := c.GlobalString("log")
-			createLogFile(log)
-
-			// connect to db
-			guser := c.GlobalString("u")
-			gpass := c.GlobalString("p")
-			gdbname := c.GlobalString("db")
-
-			connectDb(guser, gpass, gdbname)
-
-			// check dir is not empty
-			dir := c.GlobalString("d")
-
-			if dir == "" && len(scanDir) == 0 {
-				return cli.NewExitError("", 0)
 			}
 		}
 
+		// create log
+		log := c.GlobalString("log")
+		createLogFile(log)
+
+		// connect to db
+		guser := c.GlobalString("u")
+		gpass := c.GlobalString("p")
+		gdbname := c.GlobalString("db")
+		if len(c.Args()) != 0 {
+			connectDb(guser, gpass, gdbname)
+		}
+
+		// check dir is not empty
+		dir := c.GlobalString("d")
+
+		if dir == "" && len(scanDir) == 0 {
+			return cli.NewExitError("\n\n\033[0;31mError: Please use -d or --cfg flags setting scan directorys\033[0m", 0)
+		}
+
+
+
+
+		return nil
+	}
+
+	app.After = func(c *cli.Context) error {
+		if len(c.Args()) != 0 {
+			commandName := c.Args()[0]
+
+			fmt.Printf("\033[0;32m%s finished. You can see result in %s or using following command:\n\n\033[0;36mtail %s\033[0m", commandName, l.GetPath(), l.GetPath())
+		}
 
 		return nil
 	}
@@ -185,12 +199,11 @@ func createLogFile (logPath string) {
 		homeDir = usr.HomeDir
 	}
 
-
-	if logPath == "" && conf.GetString("logPath") == "" && DEBUG {
+	if logPath == "" && ( conf == nil || conf.GetString("logPath") == "") && DEBUG {
 		os.Mkdir(homeDir + "/FileChecker", 0755)
 		l = logger.New(homeDir + "/FileChecker/debug.log")
 	} else {
-		if conf.GetString("logPath") != "" {
+		if conf != nil && conf.GetString("logPath") != "" {
 			l = logger.New(conf.GetString("logPath"))
 		} else if logPath != "" {
 			l = logger.New(logPath)
@@ -398,6 +411,8 @@ func scanFiles(path string, recursive bool) {
 
 		}
 	}
+
+	l.Info(fmt.Sprintf("Scan %s finished!", path))
 }
 
 func inSlice(search string, slice []string) bool {

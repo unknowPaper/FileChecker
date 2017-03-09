@@ -44,6 +44,10 @@ func New(log_path string) *Logger {
 	return l
 }
 
+func (l *Logger) GetPath() string {
+	return l.logPath
+}
+
 func (l *Logger) LogF(level int, format string, data ...interface{}) {
 	s := fmt.Sprintf(format, data...)
 

@@ -45,7 +45,7 @@ GLOBAL OPTIONS:
 
 #### Step 1 - Edit config
 
-You must set mysql username and password.
+You must set mysql username and password using yaml format config file or flags.
 
 All config example:
 
@@ -69,6 +69,18 @@ mysql:
   username: root
   password:
   database: filesmd5
+```
+
+You can use --cfg flag to set config location.
+
+```
+FileChecker --cfg /your/config/location
+```
+
+Or use flag to set mysql username and password
+
+```
+FileChecker -r -d "/bin, /sbin" -u root -p 123456 --db filesmd5 scan
 ```
 
 
