@@ -93,6 +93,12 @@ func main() {
 
 	app.Commands = []cli.Command{
 		{
+			Name: "install",
+			Aliases: []string{"i"},
+			Usage: "Install FileChecker schema",
+			Action: installAction,
+		},
+		{
 			Name:            "scan",
 			Aliases:         []string{"s"},
 			Usage:           "Scan all files in the directory for the init time.",
@@ -137,23 +143,6 @@ func main() {
 		log := c.GlobalString("log")
 		createLogFile(log)
 
-		// connect to db
-		guser := c.GlobalString("u")
-		gpass := c.GlobalString("p")
-		gdbname := c.GlobalString("db")
-		if len(c.Args()) != 0 {
-			connectDb(guser, gpass, gdbname)
-		}
-
-		// check dir is not empty
-		dir := c.GlobalString("d")
-
-		if dir == "" && len(scanDir) == 0 {
-			return cli.NewExitError("\n\n\033[0;31mError: Please use -d or --cfg flags setting scan directorys\033[0m", 0)
-		}
-
-
-
 
 		return nil
 	}
@@ -188,6 +177,39 @@ func main() {
 
 	app.Run(os.Args)
 
+}
+
+func installAction(c *cli.Context) error {
+	guser := c.GlobalString("u")
+	gpass := c.GlobalString("p")
+	gdbname := c.GlobalString("db")
+	connectDb(guser, gpass, gdbname)
+
+	if err := db.Ping(); err != nil {
+		return cli.NewExitError(err.Error(), 99)
+	}
+
+	schema_sql := `CREATE TABLE files (
+	id int(11) NOT NULL AUTO_INCREMENT,
+	path varchar(255) NOT NULL COMMENT 'Absolute path',
+	md5 varchar(100) NOT NULL COMMENT 'file md5',
+	content blob,
+	created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at datetime NOT NULL,
+	PRIMARY KEY (id),
+	UNIQUE KEY path_UNIQUE (path)
+	) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=utf8;`
+
+	_, err := db.Exec(schema_sql)
+
+	if err != nil {
+		l.Error(fmt.Sprintf("Install error! %s", err))
+		return cli.NewExitError(err.Error(), 98)
+	}
+
+	l.Info("Install success.")
+
+	return nil
 }
 
 func createLogFile (logPath string) {
@@ -267,7 +289,19 @@ func connectDb(globalUser, globalPass, globalDbname string) {
 }
 
 func commandAction(c *cli.Context) error {
+	// connect to db
+	guser := c.GlobalString("u")
+	gpass := c.GlobalString("p")
+	gdbname := c.GlobalString("db")
+	connectDb(guser, gpass, gdbname)
+
+	// check dir is not empty
 	dirFlag := c.GlobalString("d")
+
+	if dirFlag == "" && len(scanDir) == 0 {
+		return cli.NewExitError("\n\n\033[0;31mError: Please use -d or --cfg flags setting scan directorys\033[0m", 0)
+	}
+
 	if dirFlag != "" {
 		dirFlags := strings.Split(dirFlag, ",")
 		scanDir = append(scanDir, dirFlags...)

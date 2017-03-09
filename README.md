@@ -11,12 +11,20 @@ And send notification when some files have been changed by another one.
 * Store in MySQL.
 * Notifycation by E-mail.
 * Print diff string in notification.
+* *Next will support sqlite
 
 ## Install
 
 ```
 go get github.com/unknowPaper/FileChecker/...
 ```
+
+Install mysql schema
+
+```
+FileChecker -u MYSQLUSER -p MYSQLPASS --db MYSQLDBNAME install
+```
+
 ## Usage
 
 #### All commands
