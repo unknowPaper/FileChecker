@@ -38,17 +38,15 @@ var findFileStmt *sql.Stmt
 var insertFileStmt *sql.Stmt
 var updateFileStmt *sql.Stmt
 
-const DEBUG = false
+var DEBUG = false
 
 func main() {
-	Init()
-
 	app := cli.NewApp()
 
 	app.Name = "File MD5 Record"
 	app.Version = "0.1"
 	app.Usage = ""
-	app.UsageText = "FileChecker -d DIR_NAME s"
+	app.UsageText = "FileChecker -d DIR_NAME scan\n   FileChecker -cfg config.yaml scan"
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -59,6 +57,11 @@ func main() {
 		cli.BoolFlag{
 			Name:  "recursive, r",
 			Usage: "Scan recursively",
+		},
+		cli.StringFlag{
+			Name:  "config, cfg",
+			Value: "config.yaml",
+			Usage: "Config file location",
 		},
 		cli.StringFlag{
 			Name:  "username, u",
@@ -74,6 +77,16 @@ func main() {
 			Name:  "database, db",
 			Value: "",
 			Usage: "MySQL database name",
+		},
+		cli.StringFlag{
+			Name: "log",
+			Value: "",
+			Usage: "Set log file location.",
+		},
+		cli.BoolFlag{
+			Name:  "debug",
+			Usage: "Enable debug mode",
+			Destination: &DEBUG,
 		},
 	}
 
@@ -110,16 +123,28 @@ func main() {
 	}
 
 	app.Before = func(c *cli.Context) error {
+		// read config
+		cfg := c.GlobalString("cfg")
+		if err := readConfig(cfg); err != nil {
+			fmt.Println("Warning: Read config failed! you can use -cfg flag to set config location")
+		}
+
+		// create log
+		log := c.GlobalString("log")
+		createLogFile(log)
+
+		// connect to db
 		guser := c.GlobalString("u")
 		gpass := c.GlobalString("p")
 		gdbname := c.GlobalString("db")
 
 		connectDb(guser, gpass, gdbname)
 
+		// check dir is not empty
 		dir := c.GlobalString("d")
 
 		if dir == "" && len(scanDir) == 0 {
-			return cli.NewExitError("Usage: FileChecker -d DIR_NAME scan", 0)
+			return cli.NewExitError("", 0)
 		}
 
 		return nil
@@ -147,25 +172,33 @@ func main() {
 
 }
 
-func Init() {
-	readConfig()
-
-
-	if DEBUG {
+func createLogFile (logPath string) {
+	if logPath == "" && conf.GetString("logPath") == "" && DEBUG {
 		l = logger.New("debug.log")
 	} else {
-		l = logger.New(conf.GetString("logPath"))
+		if conf.GetString("logPath") != "" {
+			l = logger.New(conf.GetString("logPath"))
+		} else if logPath != "" {
+			l = logger.New(logPath)
+		} else {
+			l = logger.New(os.TempDir() + "/FileChecker.log")
+		}
 	}
 }
 
-func readConfig() {
+func readConfig(configPath string) error {
 	conf = &config.Engine{}
-	conf.Load("config.yaml")
+	err := conf.Load(configPath)
+	if err != nil {
+		return err
+	}
 
 	scanDir = strings.Split(conf.GetString("scanDir"), ",")
 	diffFileExtension = strings.Split(conf.GetString("diffExtension"), ",")
 	excludeDir = strings.Split(conf.GetString("excludeDir"), ",")
 	excludeFile = strings.Split(conf.GetString("excludeFile"), ",")
+
+	return nil
 }
 
 func connectDb(globalUser, globalPass, globalDbname string) {
@@ -191,10 +224,16 @@ func connectDb(globalUser, globalPass, globalDbname string) {
 		dbname = globalDbname
 	}
 
+	if DEBUG {
+		fmt.Printf("Ready to connect MySQL, username: %s, password: %s, dbname: %s", user, pass, dbname)
+		l.Debug(fmt.Sprintf("Ready to connect MySQL, username: %s, password: %s, dbname: %s", user, pass, dbname))
+	}
+
 	db, conErr = sql.Open(driver, user+":"+pass+"@/"+dbname)
 
 	if conErr != nil {
-		panic(conErr.Error()) // Just for example purpose. You should use proper error handling instead of panic
+
+		panic(conErr.Error())
 	}
 }
 
