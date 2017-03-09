@@ -19,6 +19,30 @@ go get github.com/unknowPaper/FileChecker/...
 ```
 ## Usage
 
+#### All commands
+```
+COMMANDS:
+     scan, s    Scan all files in the directory for the init time.
+     check, c   Check files change
+     renew, re  Renew all files MD5 and content
+     help, h    Shows a list of commands or help for one command
+```
+
+#### All Flags (options)
+```
+GLOBAL OPTIONS:
+   --dirictory value, -d value   Scan directory location
+   --recursive, -r               Scan recursively
+   --config value, --cfg value   Config file location (default: "config.yaml")
+   --username value, -u value    MySQL username
+   --password value, -p value    MySQL user password
+   --database value, --db value  MySQL database name
+   --log value                   Set log file location.
+   --debug                       Enable debug mode
+   --help, -h                    show help
+   --version, -v                 print the version
+```
+
 #### Step 1 - Edit config
 
 You must set mysql username and password.
