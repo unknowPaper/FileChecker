@@ -1,0 +1,16 @@
+{
+    "dependencies": {
+        "github.com/go-sql-driver/mysql": {
+            "branch": "master"
+        },
+        "github.com/sergi/go-diff": {
+            "branch": "master"
+        },
+        "github.com/urfave/cli": {
+            "branch": "master"
+        },
+        "gopkg.in/yaml.v2": {
+            "branch": "v2"
+        }
+    }
+}

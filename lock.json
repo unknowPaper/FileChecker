@@ -1,0 +1,63 @@
+{
+    "memo": "928e060b65591530e3dd90ac171e8f064ea46b0825223a7e4c86edc170f84235",
+    "projects": [
+        {
+            "name": "github.com/davecgh/go-spew",
+            "version": "v1.1.0",
+            "revision": "346938d642f2ec3594ed81d874461961cd0faa76",
+            "packages": [
+                "spew"
+            ]
+        },
+        {
+            "name": "github.com/go-sql-driver/mysql",
+            "branch": "master",
+            "revision": "2e00b5cd70399450106cec6431c2e2ce3cae5034",
+            "packages": [
+                "."
+            ]
+        },
+        {
+            "name": "github.com/pmezard/go-difflib",
+            "version": "v1.0.0",
+            "revision": "792786c7400a136282c1664665ae0a8db921c6c2",
+            "packages": [
+                "difflib"
+            ]
+        },
+        {
+            "name": "github.com/sergi/go-diff",
+            "branch": "master",
+            "revision": "24e2351369ec4949b2ed0dc5c477afdd4c4034e8",
+            "packages": [
+                "diffmatchpatch"
+            ]
+        },
+        {
+            "name": "github.com/stretchr/testify",
+            "version": "v1.1.4",
+            "revision": "69483b4bd14f5845b5a1e55bca19e954e827f1d0",
+            "packages": [
+                "assert",
+                "require",
+                "suite"
+            ]
+        },
+        {
+            "name": "github.com/urfave/cli",
+            "branch": "master",
+            "revision": "9e5b04886c4bfee2ceba1465b8121057355c4e53",
+            "packages": [
+                "."
+            ]
+        },
+        {
+            "name": "gopkg.in/yaml.v2",
+            "branch": "v2",
+            "revision": "a3f3340b5840cee44f372bddb5880fcbc419b46a",
+            "packages": [
+                "."
+            ]
+        }
+    ]
+}
