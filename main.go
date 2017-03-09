@@ -260,9 +260,9 @@ func connectDb(globalUser, globalPass, globalDbname string) {
 		driver = "mysql"
 	}
 
-	user := conf.GetString(driver + ".username")
-	if user == "" {
-		user = globalUser
+	username := conf.GetString(driver + ".username")
+	if username == "" {
+		username = globalUser
 	}
 
 	pass := conf.GetString(driver + ".password")
@@ -276,11 +276,11 @@ func connectDb(globalUser, globalPass, globalDbname string) {
 	}
 
 	if DEBUG {
-		fmt.Printf("Ready to connect MySQL, username: %s, password: %s, dbname: %s", user, pass, dbname)
-		l.Debug(fmt.Sprintf("Ready to connect MySQL, username: %s, password: %s, dbname: %s", user, pass, dbname))
+		fmt.Printf("Ready to connect MySQL, username: %s, password: %s, dbname: %s", username, pass, dbname)
+		l.Debug(fmt.Sprintf("Ready to connect MySQL, username: %s, password: %s, dbname: %s", username, pass, dbname))
 	}
 
-	db, conErr = sql.Open(driver, user+":"+pass+"@/"+dbname)
+	db, conErr = sql.Open(driver, username + ":" + pass + "@/" + dbname)
 
 	if conErr != nil {
 
