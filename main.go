@@ -18,6 +18,7 @@ import (
 	"net/smtp"
 	"regexp"
 	"strings"
+	"os/user"
 )
 
 var db *sql.DB
@@ -173,15 +174,27 @@ func main() {
 }
 
 func createLogFile (logPath string) {
+	var homeDir string
+	usr, err := user.Current()
+	if err != nil {
+		homeDir = os.TempDir()
+	} else {
+		homeDir = usr.HomeDir
+	}
+
+
 	if logPath == "" && conf.GetString("logPath") == "" && DEBUG {
-		l = logger.New("debug.log")
+		os.Mkdir(homeDir + "/FileChecker", 0755)
+		l = logger.New(homeDir + "/FileChecker/debug.log")
 	} else {
 		if conf.GetString("logPath") != "" {
 			l = logger.New(conf.GetString("logPath"))
 		} else if logPath != "" {
 			l = logger.New(logPath)
 		} else {
-			l = logger.New(os.TempDir() + "/FileChecker.log")
+			os.Mkdir(homeDir + "/FileChecker", 0755)
+
+			l = logger.New(homeDir + "/FileChecker/FileChecker.log")
 		}
 	}
 }
