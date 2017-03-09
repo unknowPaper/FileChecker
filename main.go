@@ -124,29 +124,32 @@ func main() {
 	}
 
 	app.Before = func(c *cli.Context) error {
-		// read config
-		cfg := c.GlobalString("cfg")
-		if err := readConfig(cfg); err != nil {
-			fmt.Println("Warning: Read config failed! you can use -cfg flag to set config location")
+		if c.Command.Name != "" {
+			// read config
+			cfg := c.GlobalString("cfg")
+			if err := readConfig(cfg); err != nil {
+				fmt.Println("Warning: Read config failed! you can use -cfg flag to set config location")
+			}
+
+			// create log
+			log := c.GlobalString("log")
+			createLogFile(log)
+
+			// connect to db
+			guser := c.GlobalString("u")
+			gpass := c.GlobalString("p")
+			gdbname := c.GlobalString("db")
+
+			connectDb(guser, gpass, gdbname)
+
+			// check dir is not empty
+			dir := c.GlobalString("d")
+
+			if dir == "" && len(scanDir) == 0 {
+				return cli.NewExitError("", 0)
+			}
 		}
 
-		// create log
-		log := c.GlobalString("log")
-		createLogFile(log)
-
-		// connect to db
-		guser := c.GlobalString("u")
-		gpass := c.GlobalString("p")
-		gdbname := c.GlobalString("db")
-
-		connectDb(guser, gpass, gdbname)
-
-		// check dir is not empty
-		dir := c.GlobalString("d")
-
-		if dir == "" && len(scanDir) == 0 {
-			return cli.NewExitError("", 0)
-		}
 
 		return nil
 	}
@@ -253,7 +256,8 @@ func connectDb(globalUser, globalPass, globalDbname string) {
 func commandAction(c *cli.Context) error {
 	dirFlag := c.GlobalString("d")
 	if dirFlag != "" {
-		scanDir = append(scanDir, dirFlag)
+		dirFlags := strings.Split(dirFlag, ",")
+		scanDir = append(scanDir, dirFlags...)
 	}
 
 	recursive := c.GlobalBool("r")
@@ -398,7 +402,7 @@ func scanFiles(path string, recursive bool) {
 
 func inSlice(search string, slice []string) bool {
 	for _, value := range slice {
-		if value == search {
+		if strings.TrimSpace(value) == search {
 			return true
 		}
 	}
