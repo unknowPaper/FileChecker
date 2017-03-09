@@ -48,7 +48,7 @@ func main() {
 	app.Name = "File MD5 Record"
 	app.Version = "0.1"
 	app.Usage = ""
-	app.UsageText = "main -d DIR_NAME s"
+	app.UsageText = "FileChecker -d DIR_NAME s"
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -119,7 +119,7 @@ func main() {
 		dir := c.GlobalString("d")
 
 		if dir == "" && len(scanDir) == 0 {
-			return cli.NewExitError("Usage: main -d DIR_NAME scan", 0)
+			return cli.NewExitError("Usage: FileChecker -d DIR_NAME scan", 0)
 		}
 
 		return nil

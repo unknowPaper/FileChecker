@@ -14,6 +14,9 @@ And send notification when some files have been changed by another one.
 
 ## Install
 
+```
+go get github.com/unknowPaper/FileChecker/...
+```
 ## Usage
 
 #### Step 1 - Edit config
@@ -50,7 +53,7 @@ mysql:
 You must scan all files at first time.
 
 ```
-fileChecker -r scan
+FileChecker -r scan
 ```
 
 -r is recursive
@@ -60,7 +63,7 @@ If you don't give -d flag, fileChecker will read scanDir in config.
 or you can add another directory in the command.
 
 ```
-fileChecker -d /usr/sbin scan
+FileChecker -d /usr/sbin scan
 ```
 It will scan /usr/sbin and scanDir in the config.
 
@@ -70,11 +73,11 @@ It will scan /usr/sbin and scanDir in the config.
 You can add this command into your cron job.
 
 ```
-fileChecker -r check
+FileChecker -r check
 ```
 
 ```
-fileChecker -r -d /usr/sbin check
+FileChecker -r -d /usr/sbin check
 ```
 
 #### Step 4 - Renew
@@ -84,5 +87,5 @@ If you update your system, files md5 absolutely changed.
 So you must run renew to update their md5 hash.
 
 ```
-fileChecker -r renew
+FileChecker -r renew
 ```
