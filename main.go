@@ -1,23 +1,23 @@
 package main
 
 import (
+	"crypto/md5"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
-	"crypto/md5"
-	"io"
 	"path/filepath"
 
 	"database/sql"
-	_ "github.com/go-sql-driver/mysql"
 	"encoding/hex"
-	"net/smtp"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/sergi/go-diff/diffmatchpatch"
+	"github.com/unknowPaper/FileChecker/config"
+	"github.com/unknowPaper/FileChecker/logger"
+	"github.com/urfave/cli"
+	"net/smtp"
 	"regexp"
 	"strings"
-	"github.com/urfave/cli"
-	"./config"
-	"./logger"
 )
 
 var db *sql.DB
@@ -37,7 +37,6 @@ var isRenew = false
 var findFileStmt *sql.Stmt
 var insertFileStmt *sql.Stmt
 var updateFileStmt *sql.Stmt
-
 
 const DEBUG = false
 
@@ -61,16 +60,30 @@ func main() {
 			Name:  "recursive, r",
 			Usage: "Scan recursively",
 		},
+		cli.StringFlag{
+			Name:  "username, u",
+			Value: "",
+			Usage: "MySQL username",
+		},
+		cli.StringFlag{
+			Name:  "password, p",
+			Value: "",
+			Usage: "MySQL user password",
+		},
+		cli.StringFlag{
+			Name:  "database, db",
+			Value: "",
+			Usage: "MySQL database name",
+		},
 	}
-
 
 	app.Commands = []cli.Command{
 		{
-			Name:    "scan",
-			Aliases: []string{"s"},
-			Usage:   "Scan all files in the directory for the init time.",
+			Name:            "scan",
+			Aliases:         []string{"s"},
+			Usage:           "Scan all files in the directory for the init time.",
 			SkipFlagParsing: true,
-			Action:  func(c *cli.Context) error {
+			Action: func(c *cli.Context) error {
 				return commandAction(c)
 			},
 		},
@@ -97,6 +110,12 @@ func main() {
 	}
 
 	app.Before = func(c *cli.Context) error {
+		guser := c.GlobalString("u")
+		gpass := c.GlobalString("p")
+		gdbname := c.GlobalString("db")
+
+		connectDb(guser, gpass, gdbname)
+
 		dir := c.GlobalString("d")
 
 		if dir == "" && len(scanDir) == 0 {
@@ -106,7 +125,7 @@ func main() {
 		return nil
 	}
 
-	defer func () {
+	defer func() {
 		if db != nil {
 			db.Close()
 		}
@@ -124,14 +143,12 @@ func main() {
 		}
 	}()
 
-
 	app.Run(os.Args)
 
 }
 
 func Init() {
 	readConfig()
-	connectDb()
 
 
 	if DEBUG {
@@ -141,7 +158,7 @@ func Init() {
 	}
 }
 
-func readConfig () {
+func readConfig() {
 	conf = &config.Engine{}
 	conf.Load("config.yaml")
 
@@ -151,22 +168,37 @@ func readConfig () {
 	excludeFile = strings.Split(conf.GetString("excludeFile"), ",")
 }
 
-func connectDb() {
+func connectDb(globalUser, globalPass, globalDbname string) {
 	var conErr error
 
 	driver := conf.GetString("storeDriver")
-	user := conf.GetString(driver + ".username")
-	pass := conf.GetString(driver + ".password")
-	dbname := conf.GetString(driver + ".database")
+	if driver == "" {
+		driver = "mysql"
+	}
 
-	db, conErr = sql.Open(driver, user + ":" + pass + "@/" + dbname)
+	user := conf.GetString(driver + ".username")
+	if user == "" {
+		user = globalUser
+	}
+
+	pass := conf.GetString(driver + ".password")
+	if pass == "" {
+		pass = globalPass
+	}
+
+	dbname := conf.GetString(driver + ".database")
+	if dbname == "" {
+		dbname = globalDbname
+	}
+
+	db, conErr = sql.Open(driver, user+":"+pass+"@/"+dbname)
 
 	if conErr != nil {
-		panic(conErr.Error())  // Just for example purpose. You should use proper error handling instead of panic
+		panic(conErr.Error()) // Just for example purpose. You should use proper error handling instead of panic
 	}
 }
 
-func commandAction (c *cli.Context) error {
+func commandAction(c *cli.Context) error {
 	dirFlag := c.GlobalString("d")
 	if dirFlag != "" {
 		scanDir = append(scanDir, dirFlag)
@@ -185,7 +217,7 @@ func commandAction (c *cli.Context) error {
 	return nil
 }
 
-func scanFiles (path string, recursive bool) {
+func scanFiles(path string, recursive bool) {
 
 	path, err := filepath.Abs(strings.TrimSpace(path))
 	if err != nil {
@@ -212,7 +244,7 @@ func scanFiles (path string, recursive bool) {
 				continue
 			}
 
-			scanFiles(path + file.Name(), recursive)
+			scanFiles(path+file.Name(), recursive)
 
 			continue
 		}
@@ -235,7 +267,7 @@ func scanFiles (path string, recursive bool) {
 		}
 
 		if DEBUG {
-			l.Debug(fmt.Sprintf("Current file: %s, MD5: %s, content: %s, DB data: %v", path + file.Name(), fileMd5, content, file_in_db))
+			l.Debug(fmt.Sprintf("Current file: %s, MD5: %s, content: %s, DB data: %v", path+file.Name(), fileMd5, content, file_in_db))
 		}
 
 		if file_in_db["md5"] == "NULL" { // new file
@@ -262,10 +294,10 @@ func scanFiles (path string, recursive bool) {
 				}
 			}
 
-			_, err = insertFileStmt.Exec(path + file.Name(), fileMd5, content)
+			_, err = insertFileStmt.Exec(path+file.Name(), fileMd5, content)
 			if err != nil {
 				//panic(err.Error())
-				l.Error(fmt.Sprintf("Insert error! path: %s, \nmd5: %s, \ncontent: %s, \nerror: %s", path + file.Name(), fileMd5, content, err))
+				l.Error(fmt.Sprintf("Insert error! path: %s, \nmd5: %s, \ncontent: %s, \nerror: %s", path+file.Name(), fileMd5, content, err))
 			}
 		} else {
 			if file_in_db["md5"] == fileMd5 {
@@ -297,8 +329,7 @@ func scanFiles (path string, recursive bool) {
 
 			if isCheck {
 				// alert
-				body := fmt.Sprintf("Alert! path: %s, old md5: %s, new md5: %s\n", path + file.Name(), file_in_db["md5"], fileMd5)
-
+				body := fmt.Sprintf("Alert! path: %s, old md5: %s, new md5: %s\n", path+file.Name(), file_in_db["md5"], fileMd5)
 
 				if file_in_db["content"] != "" {
 					l.Danger(body + fmt.Sprintf("\ndiff: \n", checkDiffText(file_in_db["content"], content)))
@@ -336,9 +367,9 @@ func getContentWithMD5(path string) (md5, content string) {
 
 		return "", ""
 	}
-        defer f.Close()
+	defer f.Close()
 
-	var re = regexp.MustCompile("^.*("+ strings.Join(diffFileExtension, "|") +")$")
+	var re = regexp.MustCompile("^.*(" + strings.Join(diffFileExtension, "|") + ")$")
 
 	if re.MatchString(path) {
 		content = getContent(f)
@@ -346,7 +377,7 @@ func getContentWithMD5(path string) (md5, content string) {
 		content = ""
 	}
 
-	f.Seek(0 ,0)
+	f.Seek(0, 0)
 	md5 = genMd5(f)
 
 	return md5, content
@@ -360,7 +391,6 @@ func genMd5(file *os.File) string {
 
 		return ""
 	}
-
 
 	return hex.EncodeToString(h.Sum(nil))
 }
@@ -377,7 +407,7 @@ func getContent(fi *os.File) string {
 	return string(contentB)
 }
 
-func findFile (path string) map[string]string {
+func findFile(path string) map[string]string {
 	// select md5 from db
 	find_file_sql := "SELECT * FROM files WHERE path = ?"
 	if findFileStmt == nil {
@@ -448,7 +478,7 @@ func findFile (path string) map[string]string {
 	return res
 }
 
-func checkDiffText (text1, text2 string) string {
+func checkDiffText(text1, text2 string) string {
 	dmp := diffmatchpatch.New()
 
 	diffs := dmp.DiffMain(text1, text2, false)
@@ -456,7 +486,7 @@ func checkDiffText (text1, text2 string) string {
 	return dmp.DiffPrettyText(diffs)
 }
 
-func checkDiffHTML (text1, text2 string) string {
+func checkDiffHTML(text1, text2 string) string {
 	dmp := diffmatchpatch.New()
 
 	diffs := dmp.DiffMain(text1, text2, false)
@@ -474,13 +504,13 @@ func sendEmail(body string) error {
 
 	title := "Alert! file changed found!"
 
-	mime := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n";
+	mime := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
 
 	msg := "Subject: " + title + "\n" +
 		mime + "\n<html><body>" +
 		body + "</body></html>"
 
-	err := smtp.SendMail(host + ":" + port,
+	err := smtp.SendMail(host+":"+port,
 		smtp.PlainAuth(account, from, pass, host),
 		from, []string{to}, []byte(msg))
 
