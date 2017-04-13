@@ -16,9 +16,9 @@ import (
 	"github.com/unknowPaper/FileChecker/logger"
 	"github.com/urfave/cli"
 	"net/smtp"
+	"os/user"
 	"regexp"
 	"strings"
-	"os/user"
 )
 
 var db *sql.DB
@@ -80,23 +80,23 @@ func main() {
 			Usage: "MySQL database name",
 		},
 		cli.StringFlag{
-			Name: "log",
+			Name:  "log",
 			Value: "",
 			Usage: "Set log file location.",
 		},
 		cli.BoolFlag{
-			Name:  "debug",
-			Usage: "Enable debug mode",
+			Name:        "debug",
+			Usage:       "Enable debug mode",
 			Destination: &DEBUG,
 		},
 	}
 
 	app.Commands = []cli.Command{
 		{
-			Name: "install",
+			Name:    "install",
 			Aliases: []string{"i"},
-			Usage: "Install FileChecker schema",
-			Action: installAction,
+			Usage:   "Install FileChecker schema",
+			Action:  installAction,
 		},
 		{
 			Name:            "scan",
@@ -143,7 +143,6 @@ func main() {
 		// create log
 		log := c.GlobalString("log")
 		createLogFile(log)
-
 
 		return nil
 	}
@@ -211,7 +210,7 @@ func installAction(c *cli.Context) error {
 	return nil
 }
 
-func createLogFile (logPath string) {
+func createLogFile(logPath string) {
 	var homeDir string
 	usr, err := user.Current()
 	if err != nil {
@@ -220,8 +219,8 @@ func createLogFile (logPath string) {
 		homeDir = usr.HomeDir
 	}
 
-	if logPath == "" && ( conf == nil || conf.GetString("logPath") == "") && DEBUG {
-		os.Mkdir(homeDir + "/FileChecker", 0755)
+	if logPath == "" && (conf == nil || conf.GetString("logPath") == "") && DEBUG {
+		os.Mkdir(homeDir+"/FileChecker", 0755)
 		l = logger.New(homeDir + "/FileChecker/debug.log")
 	} else {
 		if conf != nil && conf.GetString("logPath") != "" {
@@ -229,7 +228,7 @@ func createLogFile (logPath string) {
 		} else if logPath != "" {
 			l = logger.New(logPath)
 		} else {
-			os.Mkdir(homeDir + "/FileChecker", 0755)
+			os.Mkdir(homeDir+"/FileChecker", 0755)
 
 			l = logger.New(homeDir + "/FileChecker/FileChecker.log")
 		}
@@ -280,7 +279,7 @@ func connectDb(globalUser, globalPass, globalDbname string) error {
 		l.Debug(fmt.Sprintf("Ready to connect MySQL, username: %s, password: %s, dbname: %s", username, pass, dbname))
 	}
 
-	db, conErr = sql.Open(driver, username + ":" + pass + "@/" + dbname)
+	db, conErr = sql.Open(driver, username+":"+pass+"@/"+dbname)
 
 	if conErr != nil {
 		return conErr
@@ -310,7 +309,6 @@ func commandAction(c *cli.Context) error {
 		return mixErr
 	}
 
-
 	recursive := c.GlobalBool("r")
 
 	if DEBUG {
@@ -324,7 +322,7 @@ func commandAction(c *cli.Context) error {
 	return nil
 }
 
-func mixScanDir (dirFlag string) error {
+func mixScanDir(dirFlag string) error {
 
 	if dirFlag != "" {
 		dirFlags := strings.Split(dirFlag, ",")
@@ -344,7 +342,6 @@ func scanFiles(path string, recursive bool) error {
 	if pathErr != nil {
 		return pathErr
 	}
-
 
 	files, err := ioutil.ReadDir(path)
 	if err != nil {
@@ -427,7 +424,7 @@ func scanFiles(path string, recursive bool) error {
 	return nil
 }
 
-func handleNewFile (path string, file os.FileInfo, fileMd5 string, content string) error {
+func handleNewFile(path string, file os.FileInfo, fileMd5 string, content string) error {
 	sendNewFileNotifyWhenCheck(path, file.Name(), fileMd5, content)
 
 	// insert to db
@@ -452,7 +449,7 @@ func handleNewFile (path string, file os.FileInfo, fileMd5 string, content strin
 	return nil
 }
 
-func handleReNew (fileMd5, inDbPath string) error {
+func handleReNew(fileMd5, inDbPath string) error {
 	if updateFileStmt == nil {
 		if updateErr := prepareUpdateStmt(); updateErr != nil {
 			l.Error(fmt.Sprintf("Prepare update statement error! %v", updateErr.Error()))
@@ -470,8 +467,8 @@ func handleReNew (fileMd5, inDbPath string) error {
 	return err
 }
 
-func handleCheck (path, fileName, fileMd5, inDbMd5, content, inDbContent string) {
-	body := fmt.Sprintf("Alert! path: %s, old md5: %s, new md5: %s\n", path + fileName, inDbMd5, fileMd5)
+func handleCheck(path, fileName, fileMd5, inDbMd5, content, inDbContent string) {
+	body := fmt.Sprintf("Alert! path: %s, old md5: %s, new md5: %s\n", path+fileName, inDbMd5, fileMd5)
 
 	if inDbContent != "" {
 		l.Danger(body + fmt.Sprintf("\ndiff: \n", checkDiffText(inDbContent, content)))
@@ -495,7 +492,7 @@ func sendNewFileNotifyWhenCheck(path, filename, fileMd5, content string) {
 	}
 }
 
-func prepareInsertStmt () error {
+func prepareInsertStmt() error {
 	var err error
 	insert_sql := "INSERT INTO files (path, md5, content, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())"
 	insertFileStmt, err = db.Prepare(insert_sql)
@@ -503,7 +500,7 @@ func prepareInsertStmt () error {
 	return err
 }
 
-func prepareUpdateStmt () error {
+func prepareUpdateStmt() error {
 	var err error
 	update_sql := "UPDATE files SET md5 = ? where path = ?"
 	updateFileStmt, err = db.Prepare(update_sql)
@@ -511,7 +508,7 @@ func prepareUpdateStmt () error {
 	return err
 }
 
-func getAbsPath (path string) (string, error) {
+func getAbsPath(path string) (string, error) {
 	path, err := filepath.Abs(strings.TrimSpace(path))
 	if err != nil {
 		errorStr := "Convert file absolute path error: " + path
@@ -577,7 +574,6 @@ func getRealContent(fi *os.File) string {
 
 	return string(contentB)
 }
-
 
 func genMd5(file *os.File) string {
 	h := md5.New()
