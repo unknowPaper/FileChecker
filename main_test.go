@@ -2,13 +2,13 @@ package main
 
 import (
 	"github.com/stretchr/testify/assert"
-	"testing"
-	"os"
 	"github.com/unknowPaper/FileChecker/config"
-	"os/user"
 	"io/ioutil"
+	"os"
+	"os/user"
 	"regexp"
 	"strings"
+	"testing"
 )
 
 var testConfigFileName = "test_config.yaml"
@@ -32,7 +32,7 @@ mysql:
   password:
   database: filesmd5`
 
-func createConfigFileForTest () {
+func createConfigFileForTest() {
 
 	// write the whole body at once
 	err := ioutil.WriteFile(testConfigFileName, []byte(testConfigContent), 0644)
@@ -41,11 +41,11 @@ func createConfigFileForTest () {
 	}
 }
 
-func deleteTestConfigFile () {
+func deleteTestConfigFile() {
 	os.Remove(testConfigFileName)
 }
 
-func TestReadConfig (t *testing.T) {
+func TestReadConfig(t *testing.T) {
 	createConfigFileForTest()
 	defer deleteTestConfigFile()
 
@@ -55,14 +55,14 @@ func TestReadConfig (t *testing.T) {
 	assert.Equal(t, strings.Split(conf.GetString("scanDir"), ","), scanDir)
 }
 
-func TestConnectDbFailed (t *testing.T) {
+func TestConnectDbFailed(t *testing.T) {
 
 	err := connectDb("user", "pass", "dbname")
 
 	assert.Error(t, err)
 }
 
-func TestScanDirEmpty (t *testing.T) {
+func TestScanDirEmpty(t *testing.T) {
 	// read from config
 	err := mixScanDir("")
 	assert.NoError(t, err)
@@ -83,7 +83,7 @@ func TestScanDirEmpty (t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestInSlice (t *testing.T) {
+func TestInSlice(t *testing.T) {
 	testSlice := []string{"abc", "defg", " hij "}
 
 	// test find
@@ -95,16 +95,6 @@ func TestInSlice (t *testing.T) {
 	// test can not search
 	assert.Equal(t, false, inSlice("abcd", testSlice))
 }
-
-
-
-
-
-
-
-
-
-
 
 func TestCreateLogFileWithDefault(t *testing.T) {
 	DEBUG = false
@@ -126,7 +116,6 @@ func TestCreateLogFileWithDefault(t *testing.T) {
 	f, err := os.Open(usr.HomeDir + "/FileChecker/FileChecker.log")
 	defer f.Close()
 	assert.NoError(t, err)
-
 
 	content, err := ioutil.ReadAll(f)
 	assert.NoError(t, err)
@@ -184,13 +173,11 @@ func TestCreateLogFileWithConfig(t *testing.T) {
 	createLogFile("")
 	assert.NotNil(t, l)
 
-
 	l.Info("test")
 
 	f, err := os.Open(usr.HomeDir + "/testlog.log")
 	defer f.Close()
 	assert.NoError(t, err)
-
 
 	content, err := ioutil.ReadAll(f)
 	assert.NoError(t, err)
@@ -219,7 +206,6 @@ func TestCreateLogFileWithFlag(t *testing.T) {
 	f, err := os.Open(filePath)
 	defer f.Close()
 	assert.NoError(t, err)
-
 
 	content, err := ioutil.ReadAll(f)
 	assert.NoError(t, err)
