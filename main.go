@@ -133,6 +133,7 @@ func main() {
 
 		// read config
 		cfg := c.GlobalString("cfg")
+		fmt.Println(cfg)
 		if err := readConfig(cfg); err != nil {
 			if len(c.Args()) != 0 {
 				fmt.Println("Warning: Read config failed! you can use -cfg flag to set config location")
@@ -183,10 +184,8 @@ func installAction(c *cli.Context) error {
 	guser := c.GlobalString("u")
 	gpass := c.GlobalString("p")
 	gdbname := c.GlobalString("db")
-	connectDb(guser, gpass, gdbname)
-
-	if err := db.Ping(); err != nil {
-		return cli.NewExitError(err.Error(), 99)
+	if err := connectDb(guser, gpass, gdbname); err != nil {
+		return err
 	}
 
 	schema_sql := `CREATE TABLE files (
@@ -241,6 +240,7 @@ func readConfig(configPath string) error {
 	conf = &config.Engine{}
 	err := conf.Load(configPath)
 	if err != nil {
+		fmt.Println(err)
 		return err
 	}
 
@@ -252,7 +252,7 @@ func readConfig(configPath string) error {
 	return nil
 }
 
-func connectDb(globalUser, globalPass, globalDbname string) {
+func connectDb(globalUser, globalPass, globalDbname string) error {
 	var conErr error
 
 	driver := conf.GetString("storeDriver")
@@ -283,9 +283,15 @@ func connectDb(globalUser, globalPass, globalDbname string) {
 	db, conErr = sql.Open(driver, username + ":" + pass + "@/" + dbname)
 
 	if conErr != nil {
-
-		panic(conErr.Error())
+		return conErr
 	}
+
+	if pingErr := db.Ping(); pingErr != nil {
+		return cli.NewExitError(pingErr.Error(), 99)
+		//panic(err.Error())
+	}
+
+	return nil
 }
 
 func commandAction(c *cli.Context) error {
@@ -293,19 +299,17 @@ func commandAction(c *cli.Context) error {
 	guser := c.GlobalString("u")
 	gpass := c.GlobalString("p")
 	gdbname := c.GlobalString("db")
-	connectDb(guser, gpass, gdbname)
+	if dbErr := connectDb(guser, gpass, gdbname); dbErr != nil {
+		return dbErr
+	}
 
 	// check dir is not empty
 	dirFlag := c.GlobalString("d")
-
-	if dirFlag == "" && len(scanDir) == 0 {
-		return cli.NewExitError("\n\n\033[0;31mError: Please use -d or --cfg flags setting scan directorys\033[0m", 0)
+	mixErr := mixScanDir(dirFlag)
+	if mixErr != nil {
+		return mixErr
 	}
 
-	if dirFlag != "" {
-		dirFlags := strings.Split(dirFlag, ",")
-		scanDir = append(scanDir, dirFlags...)
-	}
 
 	recursive := c.GlobalBool("r")
 
@@ -320,21 +324,33 @@ func commandAction(c *cli.Context) error {
 	return nil
 }
 
-func scanFiles(path string, recursive bool) {
+func mixScanDir (dirFlag string) error {
 
-	path, err := filepath.Abs(strings.TrimSpace(path))
-	if err != nil {
-		l.Error("Convert file absolute path error: " + path)
-
-		return
+	if dirFlag != "" {
+		dirFlags := strings.Split(dirFlag, ",")
+		scanDir = append(scanDir, dirFlags...)
 	}
-	path = path + "/"
+
+	if len(scanDir) == 0 {
+		return cli.NewExitError("\n\n\033[0;31mError: Please use -d or --cfg flags setting scan directorys\033[0m", 0)
+	}
+
+	return nil
+}
+
+func scanFiles(path string, recursive bool) error {
+
+	path, pathErr := getAbsPath(path)
+	if pathErr != nil {
+		return pathErr
+	}
+
 
 	files, err := ioutil.ReadDir(path)
 	if err != nil {
 		l.Error(fmt.Sprintf("Can not read dir, path: %s, error: %v", path, err.Error()))
 
-		return
+		return fmt.Errorf("Can not read dir, path: %s, error: %v", path, err.Error())
 	}
 
 	if DEBUG {
@@ -343,10 +359,14 @@ func scanFiles(path string, recursive bool) {
 
 	for _, file := range files {
 		if file.IsDir() {
+			// not recursive
+			// or in exclude dir list
+			// continue next file
 			if !recursive || inSlice(file.Name(), excludeDir) {
 				continue
 			}
 
+			// scan files recursively
 			scanFiles(path+file.Name(), recursive)
 
 			continue
@@ -374,79 +394,133 @@ func scanFiles(path string, recursive bool) {
 		}
 
 		if file_in_db["md5"] == "NULL" { // new file
-			if isCheck {
-				// 寄信通知有新增檔案
-				body := fmt.Sprintf("New file found in %s, file name is %s, MD5: %s", path, file.Name(), fileMd5)
-				if content != "" {
-					body += "\ncontent: \n" + content
-				}
 
-				l.Danger(body)
-				sendEmail(body)
+			newFileErr := handleNewFile(path, file, fileMd5, content)
+			if newFileErr != nil {
+				continue
 			}
 
-			// insert to db
-			if insertFileStmt == nil {
-				insert_sql := "INSERT INTO files (path, md5, content, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())"
-				insertFileStmt, err = db.Prepare(insert_sql)
-				if err != nil {
-					//panic(err.Error())
-					l.Error(fmt.Sprintf("Prepare insert statement error! error: %v", err.Error()))
-
-					continue
-				}
-			}
-
-			_, err = insertFileStmt.Exec(path+file.Name(), fileMd5, content)
-			if err != nil {
-				//panic(err.Error())
-				l.Error(fmt.Sprintf("Insert error! path: %s, \nmd5: %s, \ncontent: %s, \nerror: %s", path+file.Name(), fileMd5, content, err))
-			}
 		} else {
+			// continue if md5 does not changed
 			if file_in_db["md5"] == fileMd5 {
 				continue
 			}
 
+			// renew md5 if is renew mode
 			if isRenew {
 				// update md5
-				if updateFileStmt == nil {
-					var err error
-					update_sql := "UPDATE files SET md5 = ? where path = ?"
-					updateFileStmt, err = db.Prepare(update_sql)
-					if err != nil {
-						//panic(err.Error())
-						l.Error(fmt.Sprintf("Prepare update statement error! %v", err.Error()))
-
-						continue
-					}
-				}
-
-				_, err = updateFileStmt.Exec(fileMd5, file_in_db["path"])
-				if err != nil {
-					//panic(err.Error())
-					l.Error(fmt.Sprintf("Update error! path: %s, md5: %s, error: %s", file_in_db["path"], fileMd5, err))
-				}
+				handleReNew(fileMd5, file_in_db["path"])
 
 				continue
 			}
 
+			// send notification in check mode
 			if isCheck {
-				// alert
-				body := fmt.Sprintf("Alert! path: %s, old md5: %s, new md5: %s\n", path+file.Name(), file_in_db["md5"], fileMd5)
-
-				if file_in_db["content"] != "" {
-					l.Danger(body + fmt.Sprintf("\ndiff: \n", checkDiffText(file_in_db["content"], content)))
-
-					body += fmt.Sprintf("\ndiff: \n<br>", checkDiffHTML(file_in_db["content"], content))
-				}
-
-				sendEmail(body)
+				handleCheck(path, file.Name(), fileMd5, file_in_db["md5"], content, file_in_db["content"])
 			}
 
 		}
 	}
 
 	l.Info(fmt.Sprintf("Scan %s finished!", path))
+
+	return nil
+}
+
+func handleNewFile (path string, file os.FileInfo, fileMd5 string, content string) error {
+	sendNewFileNotifyWhenCheck(path, file.Name(), fileMd5, content)
+
+	// insert to db
+	if insertFileStmt == nil {
+		prepareErr := prepareInsertStmt()
+		if prepareErr != nil {
+			e := fmt.Errorf("Prepare insert statement error! error: %v", prepareErr.Error())
+			l.Error(e.Error())
+
+			return e
+		}
+	}
+
+	_, err := insertFileStmt.Exec(path+file.Name(), fileMd5, content)
+	if err != nil {
+		e := fmt.Errorf("Insert error! path: %s, \nmd5: %s, \ncontent: %s, \nerror: %s", path+file.Name(), fileMd5, content, err)
+		l.Error(e.Error())
+
+		return e
+	}
+
+	return nil
+}
+
+func handleReNew (fileMd5, inDbPath string) error {
+	if updateFileStmt == nil {
+		if updateErr := prepareUpdateStmt(); updateErr != nil {
+			l.Error(fmt.Sprintf("Prepare update statement error! %v", updateErr.Error()))
+
+			return updateErr
+		}
+	}
+
+	_, err := updateFileStmt.Exec(fileMd5, inDbPath)
+	if err != nil {
+		//panic(err.Error())
+		l.Error(fmt.Sprintf("Update error! path: %s, md5: %s, error: %s", inDbPath, fileMd5, err))
+	}
+
+	return err
+}
+
+func handleCheck (path, fileName, fileMd5, inDbMd5, content, inDbContent string) {
+	body := fmt.Sprintf("Alert! path: %s, old md5: %s, new md5: %s\n", path + fileName, inDbMd5, fileMd5)
+
+	if inDbContent != "" {
+		l.Danger(body + fmt.Sprintf("\ndiff: \n", checkDiffText(inDbContent, content)))
+
+		body += fmt.Sprintf("\ndiff: \n<br>", checkDiffHTML(inDbContent, content))
+	}
+
+	sendEmail(body)
+}
+
+func sendNewFileNotifyWhenCheck(path, filename, fileMd5, content string) {
+	if isCheck {
+		// 寄信通知有新增檔案
+		body := fmt.Sprintf("New file found in %s, file name is %s, MD5: %s", path, filename, fileMd5)
+		if content != "" {
+			body += "\ncontent: \n" + content
+		}
+
+		l.Danger(body)
+		sendEmail(body)
+	}
+}
+
+func prepareInsertStmt () error {
+	var err error
+	insert_sql := "INSERT INTO files (path, md5, content, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())"
+	insertFileStmt, err = db.Prepare(insert_sql)
+
+	return err
+}
+
+func prepareUpdateStmt () error {
+	var err error
+	update_sql := "UPDATE files SET md5 = ? where path = ?"
+	updateFileStmt, err = db.Prepare(update_sql)
+
+	return err
+}
+
+func getAbsPath (path string) (string, error) {
+	path, err := filepath.Abs(strings.TrimSpace(path))
+	if err != nil {
+		errorStr := "Convert file absolute path error: " + path
+		l.Error(errorStr)
+
+		return "", cli.NewExitError(errorStr, 0)
+	}
+
+	return path + "/", nil
 }
 
 func inSlice(search string, slice []string) bool {
@@ -460,10 +534,6 @@ func inSlice(search string, slice []string) bool {
 }
 
 func getContentWithMD5(path string) (md5, content string) {
-	//path, err := filepath.Abs(path)
-	//if err != nil {
-	//	panic("Convert file absolute path error: " + path)
-	//}
 
 	f, err := os.Open(path)
 	if err != nil {
@@ -474,21 +544,40 @@ func getContentWithMD5(path string) (md5, content string) {
 	}
 	defer f.Close()
 
-	content = ""
-	if len(diffFileExtension) != 0 {
-		var re = regexp.MustCompile("^.*(" + strings.Join(diffFileExtension, "|") + ")$")
-
-		if re.MatchString(path) {
-			content = getContent(f)
-		}
-	}
-
+	content = getContent(f, path)
 
 	f.Seek(0, 0)
 	md5 = genMd5(f)
 
 	return md5, content
 }
+
+func getContent(f *os.File, path string) string {
+	content := ""
+
+	if len(diffFileExtension) != 0 {
+		var re = regexp.MustCompile("^.*(" + strings.Join(diffFileExtension, "|") + ")$")
+
+		if re.MatchString(path) {
+			content = getRealContent(f)
+		}
+	}
+
+	return content
+}
+
+func getRealContent(fi *os.File) string {
+	contentB, err := ioutil.ReadAll(fi)
+	if err != nil {
+		//panic(err.Error())
+		l.Error(fmt.Sprintf("%s getContent Error! %s", fi.Name(), err.Error()))
+
+		return ""
+	}
+
+	return string(contentB)
+}
+
 
 func genMd5(file *os.File) string {
 	h := md5.New()
@@ -500,18 +589,6 @@ func genMd5(file *os.File) string {
 	}
 
 	return hex.EncodeToString(h.Sum(nil))
-}
-
-func getContent(fi *os.File) string {
-	contentB, err := ioutil.ReadAll(fi)
-	if err != nil {
-		//panic(err.Error())
-		l.Error(fmt.Sprintf("%s getContent Error! %s", fi.Name(), err.Error()))
-
-		return ""
-	}
-
-	return string(contentB)
 }
 
 func findFile(path string) map[string]string {

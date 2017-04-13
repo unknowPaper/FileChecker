@@ -5,11 +5,106 @@ import (
 	"testing"
 	"os"
 	"github.com/unknowPaper/FileChecker/config"
-	//"io/ioutil"
 	"os/user"
 	"io/ioutil"
 	"regexp"
+	"strings"
 )
+
+var testConfigFileName = "test_config.yaml"
+var testConfigContent = `scanDir: /bin, /sbin
+excludeDir: .git
+excludeFile: .gitignore
+diffExtension: go, php
+storeDriver: mysql
+logPath: mylog.log
+notification:
+  smtp: smtp.gmail.com
+  port: 587
+  account: account
+  pass: password
+  from: account@gmail.com
+  to: to@gmail.com
+mysql:
+  Protocol: tcp
+  host: localhost
+  username: root
+  password:
+  database: filesmd5`
+
+func createConfigFileForTest () {
+
+	// write the whole body at once
+	err := ioutil.WriteFile(testConfigFileName, []byte(testConfigContent), 0644)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func deleteTestConfigFile () {
+	os.Remove(testConfigFileName)
+}
+
+func TestReadConfig (t *testing.T) {
+	createConfigFileForTest()
+	defer deleteTestConfigFile()
+
+	readConfig(testConfigFileName)
+	assert.Equal(t, "/bin, /sbin", conf.GetString("scanDir"))
+
+	assert.Equal(t, strings.Split(conf.GetString("scanDir"), ","), scanDir)
+}
+
+func TestConnectDbFailed (t *testing.T) {
+
+	err := connectDb("user", "pass", "dbname")
+
+	assert.Error(t, err)
+}
+
+func TestScanDirEmpty (t *testing.T) {
+	// read from config
+	err := mixScanDir("")
+	assert.NoError(t, err)
+
+	// read from config and flag
+	expectScanDir := append(scanDir, "/tmp")
+	err = mixScanDir("/tmp")
+	assert.NoError(t, err)
+	assert.Equal(t, expectScanDir, scanDir)
+
+	// no any scan dir
+	scanDir = []string{}
+	err = mixScanDir("")
+	assert.Error(t, err)
+
+	// read from flag only
+	err = mixScanDir("/bin")
+	assert.NoError(t, err)
+}
+
+func TestInSlice (t *testing.T) {
+	testSlice := []string{"abc", "defg", " hij "}
+
+	// test find
+	assert.Equal(t, true, inSlice("abc", testSlice))
+
+	// test find with space
+	assert.Equal(t, true, inSlice("hij", testSlice))
+
+	// test can not search
+	assert.Equal(t, false, inSlice("abcd", testSlice))
+}
+
+
+
+
+
+
+
+
+
+
 
 func TestCreateLogFileWithDefault(t *testing.T) {
 	DEBUG = false

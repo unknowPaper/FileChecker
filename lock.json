@@ -1,5 +1,5 @@
 {
-    "memo": "928e060b65591530e3dd90ac171e8f064ea46b0825223a7e4c86edc170f84235",
+    "memo": "9fcb0ea71381c3083bc30f0754a9e19d770ec5aef1f4c9b6840125a5bde4b711",
     "projects": [
         {
             "name": "github.com/davecgh/go-spew",
@@ -12,7 +12,7 @@
         {
             "name": "github.com/go-sql-driver/mysql",
             "branch": "master",
-            "revision": "2e00b5cd70399450106cec6431c2e2ce3cae5034",
+            "revision": "9dee4ca50b83acdf57a35fb9e6fb4be640afa2f3",
             "packages": [
                 "."
             ]
@@ -28,7 +28,7 @@
         {
             "name": "github.com/sergi/go-diff",
             "branch": "master",
-            "revision": "24e2351369ec4949b2ed0dc5c477afdd4c4034e8",
+            "revision": "feef008d51ad2b3778f85d387ccf91735543008d",
             "packages": [
                 "diffmatchpatch"
             ]
@@ -46,7 +46,7 @@
         {
             "name": "github.com/urfave/cli",
             "branch": "master",
-            "revision": "9e5b04886c4bfee2ceba1465b8121057355c4e53",
+            "revision": "8ba6f23b6e36d03666a14bd9421f5e3efcb59aca",
             "packages": [
                 "."
             ]
@@ -54,7 +54,7 @@
         {
             "name": "gopkg.in/yaml.v2",
             "branch": "v2",
-            "revision": "a3f3340b5840cee44f372bddb5880fcbc419b46a",
+            "revision": "cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b",
             "packages": [
                 "."
             ]
