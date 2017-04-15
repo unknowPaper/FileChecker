@@ -25,7 +25,7 @@ var db *sql.DB
 
 var conf *config.Engine
 
-var l logger.LoggerInterface
+var l *logger.Logger
 
 var scanDir []string
 var diffFileExtension []string
