@@ -14,8 +14,8 @@ import (
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/unknowPaper/FileChecker/config"
 	"github.com/unknowPaper/FileChecker/logger"
+	"github.com/unknowPaper/FileChecker/notification"
 	"github.com/urfave/cli"
-	"net/smtp"
 	"os/user"
 	"regexp"
 	"strings"
@@ -25,7 +25,7 @@ var db *sql.DB
 
 var conf *config.Engine
 
-var l *logger.Logger
+var l logger.LoggerInterface
 
 var scanDir []string
 var diffFileExtension []string
@@ -38,6 +38,8 @@ var isRenew = false
 var findFileStmt *sql.Stmt
 var insertFileStmt *sql.Stmt
 var updateFileStmt *sql.Stmt
+
+var NotificationTitle = "Alert! file changed found!"
 
 var DEBUG = false
 
@@ -553,7 +555,7 @@ func getContent(f *os.File, path string) string {
 	content := ""
 
 	if len(diffFileExtension) != 0 {
-		var re = regexp.MustCompile("^.*(" + strings.Join(diffFileExtension, "|") + ")$")
+		var re = regexp.MustCompile("^.*[" + strings.Join(diffFileExtension, "|") + "]\\/?$")
 
 		if re.MatchString(path) {
 			content = getRealContent(f)
@@ -579,6 +581,7 @@ func genMd5(file *os.File) string {
 	h := md5.New()
 	if _, err := io.Copy(h, file); err != nil {
 		//log.Fatal(err)
+		fmt.Printf("%v", l)
 		l.Error(fmt.Sprintf("%s genMD5 error! error: %s", file.Name(), err.Error()))
 
 		return ""
@@ -682,17 +685,25 @@ func sendEmail(body string) error {
 	from := conf.GetString("notification.from")
 	to := conf.GetString("notification.to")
 
-	title := "Alert! file changed found!"
+	email_config := notification.EmailConfig{
+		ServerHost: host,
+		ServerPort: port,
+		Username:   account,
+		Password:   pass,
+		SenderAddr: from,
+	}
+	sender := notification.NewEmailSender(email_config)
+	err := sender.Send([]string{to}, NotificationTitle, body)
 
-	mime := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
+	//mime := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
 
-	msg := "Subject: " + title + "\n" +
-		mime + "\n<html><body>" +
-		body + "</body></html>"
-
-	err := smtp.SendMail(host+":"+port,
-		smtp.PlainAuth(account, from, pass, host),
-		from, []string{to}, []byte(msg))
+	//msg := "Subject: " + title + "\n" +
+	//	mime + "\n<html><body>" +
+	//	body + "</body></html>"
+	//
+	//err := smtp.SendMail(host+":"+port,
+	//	smtp.PlainAuth(account, from, pass, host),
+	//	from, []string{to}, []byte(msg))
 
 	if err != nil {
 		l.Error(fmt.Sprintf("smtp error: %s", err))

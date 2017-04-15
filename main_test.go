@@ -1,8 +1,12 @@
 package main
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"github.com/stretchr/testify/assert"
 	"github.com/unknowPaper/FileChecker/config"
+	"github.com/unknowPaper/FileChecker/logger"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/user"
@@ -45,6 +49,15 @@ func deleteTestConfigFile() {
 	os.Remove(testConfigFileName)
 }
 
+//func TestMain(m *testing.M) {
+//	//mySetupFunction()
+//
+//
+//	retCode := m.Run()
+//	//myTeardownFunction()
+//	os.Exit(retCode)
+//}
+
 func TestReadConfig(t *testing.T) {
 	createConfigFileForTest()
 	defer deleteTestConfigFile()
@@ -81,6 +94,68 @@ func TestScanDirEmpty(t *testing.T) {
 	// read from flag only
 	err = mixScanDir("/bin")
 	assert.NoError(t, err)
+}
+
+//func TestSendMail(t *testing.T) {
+//	testMailBody := `test mail body`
+//	ctrl := gomock.NewController(t)
+//	defer ctrl.Finish()
+//
+//	mock_sender := mock_main.NewMockEmailSender(ctrl)
+//
+//	mock_sender.EXPECT().Send([]string{"to@gmail.com"}, NotificationTitle, testMailBody).Return(nil)
+//
+//	smtp.MOCK().SetController(ctrl)
+//
+//	err := sendEmail(testMailBody)
+//	fmt.Printf("%v", err.Error())
+//
+//	//realSendEmail(mock_sender, "to@gmail.com", testMailBody)
+//}
+
+func TestGetMd5(t *testing.T) {
+	createConfigFileForTest()
+
+	l = logger.New("/dev/null")
+
+	var returnMD5String string
+	file, err := os.Open(testConfigFileName)
+	if err != nil {
+		print(err.Error())
+	}
+	defer file.Close()
+	hash := md5.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		print(err.Error())
+	}
+	hashInBytes := hash.Sum(nil)[:16]
+	returnMD5String = hex.EncodeToString(hashInBytes)
+
+	testF, _ := os.Open(testConfigFileName)
+	defer testF.Close()
+
+	assert.Equal(t, returnMD5String, genMd5(testF))
+
+	deleteTestConfigFile()
+}
+
+func TestGetContent(t *testing.T) {
+	createConfigFileForTest()
+
+	f, _ := os.Open(testConfigFileName)
+	absPath, perr := getAbsPath(testConfigFileName)
+	if perr != nil {
+		print(perr.Error())
+	}
+	content := getContent(f, absPath)
+	assert.Equal(t, "", content)
+
+	diffFileExtension = append(diffFileExtension, " yaml")
+	f.Seek(0, 0)
+	content = getContent(f, absPath)
+	assert.Equal(t, testConfigContent, content)
+
+	deleteTestConfigFile()
 }
 
 func TestInSlice(t *testing.T) {
