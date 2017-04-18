@@ -282,7 +282,7 @@ func getDbFileName() string {
 	if path == "" {
 		homeDir := getHomeDir()
 
-		path = homeDir + "/FileChecker.db"
+		path = homeDir + "/FileChecker/FileChecker.db"
 	}
 
 	p, _ := getAbsPath(path)

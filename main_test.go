@@ -210,7 +210,7 @@ func TestGetDbFileName(t *testing.T) {
 	readConfig("empty.yaml")
 
 	name = getDbFileName()
-	assert.Equal(t, getHomeDir()+"/FileChecker.db", name)
+	assert.Equal(t, getHomeDir()+"/FileChecker/FileChecker.db", name)
 
 	os.Remove("empty.yaml")
 }
