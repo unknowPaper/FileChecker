@@ -2,45 +2,49 @@ package main
 
 import (
 	"crypto/md5"
-	"fmt"
-	"io"
-	"io/ioutil"
-	"os"
-	"path/filepath"
-
 	"database/sql"
 	"encoding/hex"
-	_ "github.com/go-sql-driver/mysql"
+	"fmt"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/unknowPaper/FileChecker/config"
 	"github.com/unknowPaper/FileChecker/logger"
 	"github.com/unknowPaper/FileChecker/notification"
 	"github.com/urfave/cli"
+	"io"
+	"io/ioutil"
+	"os"
 	"os/user"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
 
-var db *sql.DB
+var (
+	db             *sql.DB
+	findFileStmt   *sql.Stmt
+	insertFileStmt *sql.Stmt
+	updateFileStmt *sql.Stmt
+)
 
-var conf *config.Engine
+var (
+	conf       *config.Engine
+	fileLogger *logger.Logger
+)
 
-var l *logger.Logger
+var (
+	scanDir           = []string{}
+	diffFileExtension = []string{}
+	excludeDir        = []string{}
+	excludeFile       = []string{}
+)
 
-var scanDir []string
-var diffFileExtension []string
-var excludeDir []string
-var excludeFile []string
-
-var isCheck = false
-var isRenew = false
-
-var findFileStmt *sql.Stmt
-var insertFileStmt *sql.Stmt
-var updateFileStmt *sql.Stmt
+var (
+	isCheck = false
+	isRenew = false
+)
 
 var NotificationTitle = "Alert! file changed found!"
-
 var DEBUG = false
 
 func main() {
@@ -94,12 +98,12 @@ func main() {
 	}
 
 	app.Commands = []cli.Command{
-		{
-			Name:    "install",
-			Aliases: []string{"i"},
-			Usage:   "Install FileChecker schema",
-			Action:  installAction,
-		},
+		//{
+		//	Name:    "install",
+		//	Aliases: []string{"i"},
+		//	Usage:   "Install FileChecker schema",
+		//	Action:  installAction,
+		//},
 		{
 			Name:            "scan",
 			Aliases:         []string{"s"},
@@ -135,7 +139,7 @@ func main() {
 
 		// read config
 		cfg := c.GlobalString("cfg")
-		fmt.Println(cfg)
+		//fmt.Println(cfg)
 		if err := readConfig(cfg); err != nil {
 			if len(c.Args()) != 0 {
 				fmt.Println("Warning: Read config failed! you can use -cfg flag to set config location")
@@ -146,6 +150,16 @@ func main() {
 		log := c.GlobalString("log")
 		createLogFile(log)
 
+		// if sqlite file not exist
+		// then create and init
+		dbfile := getDbFileName()
+		_, err := os.Stat(dbfile)
+		if os.IsNotExist(err) {
+			initDb(dbfile)
+		}
+
+		//return cli.NewExitError("test", 99)
+
 		return nil
 	}
 
@@ -153,7 +167,7 @@ func main() {
 		if len(c.Args()) != 0 {
 			commandName := c.Args()[0]
 
-			fmt.Printf("\033[0;32m%s finished. You can see result in %s or using following command:\n\n\033[0;36mtail %s\033[0m", commandName, l.GetPath(), l.GetPath())
+			fmt.Printf("\033[0;32m%s finished. You can see result in %s or using following command:\n\n\033[0;36mtail %s\033[0m", commandName, fileLogger.GetPath(), fileLogger.GetPath())
 		}
 
 		return nil
@@ -181,38 +195,51 @@ func main() {
 
 }
 
-func installAction(c *cli.Context) error {
-	guser := c.GlobalString("u")
-	gpass := c.GlobalString("p")
-	gdbname := c.GlobalString("db")
-	if err := connectDb(guser, gpass, gdbname); err != nil {
-		return err
+func initDb(dbFile string) error {
+	if dbErr := connectDb(dbFile); dbErr != nil {
+		return dbErr
 	}
 
 	schema_sql := `CREATE TABLE files (
-	id int(11) NOT NULL AUTO_INCREMENT,
-	path varchar(255) NOT NULL COMMENT 'Absolute path',
-	md5 varchar(100) NOT NULL COMMENT 'file md5',
+	id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+	path varchar(255) NOT NULL ,
+	md5 varchar(100) NOT NULL ,
 	content blob,
 	created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	updated_at datetime NOT NULL,
-	PRIMARY KEY (id),
-	UNIQUE KEY path_UNIQUE (path)
-	) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=utf8;`
+	updated_at datetime NOT NULL
+	) `
 
 	_, err := db.Exec(schema_sql)
 
 	if err != nil {
-		l.Error(fmt.Sprintf("Install error! %s", err))
+		fileLogger.Error(fmt.Sprintf("Install error! %s", err))
 		return cli.NewExitError(err.Error(), 98)
 	}
 
-	l.Info("Install success.")
+	fileLogger.Info("Install success.")
 
 	return nil
 }
 
 func createLogFile(logPath string) {
+	homeDir := getHomeDir()
+
+	if logPath == "" && (conf == nil || conf.GetString("logPath") == "") && DEBUG {
+		os.Mkdir(homeDir+"/FileChecker", 0755)
+		fileLogger = logger.New(homeDir + "/FileChecker/debug.log")
+	} else {
+		if conf != nil && conf.GetString("logPath") != "" {
+			fileLogger = logger.New(conf.GetString("logPath"))
+		} else if logPath != "" {
+			fileLogger = logger.New(logPath)
+		} else {
+			os.Mkdir(homeDir+"/FileChecker", 0755)
+
+			fileLogger = logger.New(homeDir + "/FileChecker/FileChecker.log")
+		}
+	}
+}
+func getHomeDir() string {
 	var homeDir string
 	usr, err := user.Current()
 	if err != nil {
@@ -220,21 +247,7 @@ func createLogFile(logPath string) {
 	} else {
 		homeDir = usr.HomeDir
 	}
-
-	if logPath == "" && (conf == nil || conf.GetString("logPath") == "") && DEBUG {
-		os.Mkdir(homeDir+"/FileChecker", 0755)
-		l = logger.New(homeDir + "/FileChecker/debug.log")
-	} else {
-		if conf != nil && conf.GetString("logPath") != "" {
-			l = logger.New(conf.GetString("logPath"))
-		} else if logPath != "" {
-			l = logger.New(logPath)
-		} else {
-			os.Mkdir(homeDir+"/FileChecker", 0755)
-
-			l = logger.New(homeDir + "/FileChecker/FileChecker.log")
-		}
-	}
+	return homeDir
 }
 
 func readConfig(configPath string) error {
@@ -245,43 +258,52 @@ func readConfig(configPath string) error {
 		return err
 	}
 
-	scanDir = strings.Split(conf.GetString("scanDir"), ",")
-	diffFileExtension = strings.Split(conf.GetString("diffExtension"), ",")
-	excludeDir = strings.Split(conf.GetString("excludeDir"), ",")
-	excludeFile = strings.Split(conf.GetString("excludeFile"), ",")
+	if scanDirInConfig := conf.GetString("scanDir"); scanDirInConfig != "" {
+		scanDir = strings.Split(scanDirInConfig, ",")
+	}
+
+	if diffExtInConfig := conf.GetString("diffExtension"); diffExtInConfig != "" {
+		diffFileExtension = strings.Split(diffExtInConfig, ",")
+	}
+
+	if excludeDirInConfig := conf.GetString("excludeDir"); excludeDirInConfig != "" {
+		excludeDir = strings.Split(excludeDirInConfig, ",")
+	}
+
+	if excludeFileInConfig := conf.GetString("excludeFile"); excludeFileInConfig != "" {
+		excludeFile = strings.Split(excludeFileInConfig, ",")
+	}
 
 	return nil
 }
 
-func connectDb(globalUser, globalPass, globalDbname string) error {
+func getDbFileName() string {
+	path := conf.GetString("sqlite.file")
+	if path == "" {
+		homeDir := getHomeDir()
+
+		path = homeDir + "/FileChecker.db"
+	}
+
+	p, _ := getAbsPath(path)
+	return strings.TrimRight(p, "/")
+}
+
+func connectDb(dbFile string) error {
+	// avoid repeat connect
+	if db != nil {
+		return nil
+	}
+
 	var conErr error
 
-	driver := conf.GetString("storeDriver")
-	if driver == "" {
-		driver = "mysql"
-	}
-
-	username := conf.GetString(driver + ".username")
-	if username == "" {
-		username = globalUser
-	}
-
-	pass := conf.GetString(driver + ".password")
-	if pass == "" {
-		pass = globalPass
-	}
-
-	dbname := conf.GetString(driver + ".database")
-	if dbname == "" {
-		dbname = globalDbname
-	}
-
 	if DEBUG {
-		fmt.Printf("Ready to connect MySQL, username: %s, password: %s, dbname: %s", username, pass, dbname)
-		l.Debug(fmt.Sprintf("Ready to connect MySQL, username: %s, password: %s, dbname: %s", username, pass, dbname))
+		ds := fmt.Sprintf("Use %s sqlite file", dbFile)
+		fmt.Print(ds)
+		fileLogger.Debug(ds)
 	}
 
-	db, conErr = sql.Open(driver, username+":"+pass+"@/"+dbname)
+	db, conErr = sql.Open("sqlite3", dbFile)
 
 	if conErr != nil {
 		return conErr
@@ -297,10 +319,7 @@ func connectDb(globalUser, globalPass, globalDbname string) error {
 
 func commandAction(c *cli.Context) error {
 	// connect to db
-	guser := c.GlobalString("u")
-	gpass := c.GlobalString("p")
-	gdbname := c.GlobalString("db")
-	if dbErr := connectDb(guser, gpass, gdbname); dbErr != nil {
+	if dbErr := connectDb(getDbFileName()); dbErr != nil {
 		return dbErr
 	}
 
@@ -314,7 +333,7 @@ func commandAction(c *cli.Context) error {
 	recursive := c.GlobalBool("r")
 
 	if DEBUG {
-		l.Debug(fmt.Sprintf("scanDir: %v, recursive: %v", scanDir, recursive))
+		fileLogger.Debug(fmt.Sprintf("scanDir: %v, recursive: %v", scanDir, recursive))
 	}
 
 	for _, dir := range scanDir {
@@ -347,13 +366,13 @@ func scanFiles(path string, recursive bool) error {
 
 	files, err := ioutil.ReadDir(path)
 	if err != nil {
-		l.Error(fmt.Sprintf("Can not read dir, path: %s, error: %v", path, err.Error()))
+		fileLogger.Error(fmt.Sprintf("Can not read dir, path: %s, error: %v", path, err.Error()))
 
 		return fmt.Errorf("Can not read dir, path: %s, error: %v", path, err.Error())
 	}
 
 	if DEBUG {
-		l.Debug(fmt.Sprintf("scanFiles in %s, have %d files, is recursive? %v", path, len(files), recursive))
+		fileLogger.Debug(fmt.Sprintf("scanFiles in %s, have %d files, is recursive? %v", path, len(files), recursive))
 	}
 
 	for _, file := range files {
@@ -379,17 +398,21 @@ func scanFiles(path string, recursive bool) error {
 		fileMd5, content := getContentWithMD5(path + file.Name())
 		// skip when get md5 failed
 		if fileMd5 == "" && content == "" {
+			fileLogger.Error(fmt.Sprintf("Get %s file's md5 failed. md5: %s, content: %s", file.Name(), fileMd5, content))
+
 			continue
 		}
 
 		file_in_db := findFile(path + file.Name())
 		// skip when db error
 		if file_in_db == nil {
+			fileLogger.Error(fmt.Sprintf("Get %s file from db failed.", file.Name()))
+
 			continue
 		}
 
 		if DEBUG {
-			l.Debug(fmt.Sprintf("Current file: %s, MD5: %s, content: %s, DB data: %v", path+file.Name(), fileMd5, content, file_in_db))
+			fileLogger.Debug(fmt.Sprintf("Current file: %s, MD5: %s, content: %s, DB data: %v", path+file.Name(), fileMd5, content, file_in_db))
 		}
 
 		if file_in_db["md5"] == "NULL" { // new file
@@ -421,7 +444,7 @@ func scanFiles(path string, recursive bool) error {
 		}
 	}
 
-	l.Info(fmt.Sprintf("Scan %s finished!", path))
+	fileLogger.Info(fmt.Sprintf("Scan %s finished!", path))
 
 	return nil
 }
@@ -434,7 +457,7 @@ func handleNewFile(path string, file os.FileInfo, fileMd5 string, content string
 		prepareErr := prepareInsertStmt()
 		if prepareErr != nil {
 			e := fmt.Errorf("Prepare insert statement error! error: %v", prepareErr.Error())
-			l.Error(e.Error())
+			fileLogger.Error(e.Error())
 
 			return e
 		}
@@ -443,7 +466,7 @@ func handleNewFile(path string, file os.FileInfo, fileMd5 string, content string
 	_, err := insertFileStmt.Exec(path+file.Name(), fileMd5, content)
 	if err != nil {
 		e := fmt.Errorf("Insert error! path: %s, \nmd5: %s, \ncontent: %s, \nerror: %s", path+file.Name(), fileMd5, content, err)
-		l.Error(e.Error())
+		fileLogger.Error(e.Error())
 
 		return e
 	}
@@ -454,7 +477,7 @@ func handleNewFile(path string, file os.FileInfo, fileMd5 string, content string
 func handleReNew(fileMd5, inDbPath string) error {
 	if updateFileStmt == nil {
 		if updateErr := prepareUpdateStmt(); updateErr != nil {
-			l.Error(fmt.Sprintf("Prepare update statement error! %v", updateErr.Error()))
+			fileLogger.Error(fmt.Sprintf("Prepare update statement error! %v", updateErr.Error()))
 
 			return updateErr
 		}
@@ -463,7 +486,7 @@ func handleReNew(fileMd5, inDbPath string) error {
 	_, err := updateFileStmt.Exec(fileMd5, inDbPath)
 	if err != nil {
 		//panic(err.Error())
-		l.Error(fmt.Sprintf("Update error! path: %s, md5: %s, error: %s", inDbPath, fileMd5, err))
+		fileLogger.Error(fmt.Sprintf("Update error! path: %s, md5: %s, error: %s", inDbPath, fileMd5, err))
 	}
 
 	return err
@@ -473,7 +496,7 @@ func handleCheck(path, fileName, fileMd5, inDbMd5, content, inDbContent string) 
 	body := fmt.Sprintf("Alert! path: %s, old md5: %s, new md5: %s\n", path+fileName, inDbMd5, fileMd5)
 
 	if inDbContent != "" {
-		l.Danger(body + fmt.Sprintf("\ndiff: \n", checkDiffText(inDbContent, content)))
+		fileLogger.Danger(body + fmt.Sprintf("\ndiff: \n", checkDiffText(inDbContent, content)))
 
 		body += fmt.Sprintf("\ndiff: \n<br>", checkDiffHTML(inDbContent, content))
 	}
@@ -489,14 +512,14 @@ func sendNewFileNotifyWhenCheck(path, filename, fileMd5, content string) {
 			body += "\ncontent: \n" + content
 		}
 
-		l.Danger(body)
+		fileLogger.Danger(body)
 		sendEmail(body)
 	}
 }
 
 func prepareInsertStmt() error {
 	var err error
-	insert_sql := "INSERT INTO files (path, md5, content, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())"
+	insert_sql := "INSERT INTO files (path, md5, content, created_at, updated_at) VALUES (?, ?, ?, date('now'), date('now'))"
 	insertFileStmt, err = db.Prepare(insert_sql)
 
 	return err
@@ -514,7 +537,7 @@ func getAbsPath(path string) (string, error) {
 	path, err := filepath.Abs(strings.TrimSpace(path))
 	if err != nil {
 		errorStr := "Convert file absolute path error: " + path
-		l.Error(errorStr)
+		fileLogger.Error(errorStr)
 
 		return "", cli.NewExitError(errorStr, 0)
 	}
@@ -537,7 +560,7 @@ func getContentWithMD5(path string) (md5, content string) {
 	f, err := os.Open(path)
 	if err != nil {
 		//log.Fatal(err)
-		l.Error(fmt.Sprintf("Open file error! Path: %s, Error: %s", path, err.Error()))
+		fileLogger.Error(fmt.Sprintf("Open file error! Path: %s, Error: %s", path, err.Error()))
 
 		return "", ""
 	}
@@ -569,7 +592,7 @@ func getRealContent(fi *os.File) string {
 	contentB, err := ioutil.ReadAll(fi)
 	if err != nil {
 		//panic(err.Error())
-		l.Error(fmt.Sprintf("%s getContent Error! %s", fi.Name(), err.Error()))
+		fileLogger.Error(fmt.Sprintf("%s getContent Error! %s", fi.Name(), err.Error()))
 
 		return ""
 	}
@@ -581,8 +604,8 @@ func genMd5(file *os.File) string {
 	h := md5.New()
 	if _, err := io.Copy(h, file); err != nil {
 		//log.Fatal(err)
-		fmt.Printf("%v", l)
-		l.Error(fmt.Sprintf("%s genMD5 error! error: %s", file.Name(), err.Error()))
+		fmt.Printf("%v", fileLogger)
+		fileLogger.Error(fmt.Sprintf("%s genMD5 error! error: %s", file.Name(), err.Error()))
 
 		return ""
 	}
@@ -598,7 +621,7 @@ func findFile(path string) map[string]string {
 		findFileStmt, err = db.Prepare(find_file_sql)
 		if err != nil {
 			//panic(err.Error()) // proper error handling instead of panic in your app
-			l.Error(fmt.Sprintf("Prepare findFile sql Error! %s", err.Error()))
+			fileLogger.Error(fmt.Sprintf("Prepare findFile sql Error! %s", err.Error()))
 
 			return nil
 		}
@@ -608,7 +631,7 @@ func findFile(path string) map[string]string {
 	defer rows.Close()
 	if err != nil {
 		//panic(err)
-		l.Error(fmt.Sprintf("findFile Query error! %s", err.Error()))
+		fileLogger.Error(fmt.Sprintf("findFile Query error! %s", err.Error()))
 
 		return nil
 	}
@@ -617,7 +640,7 @@ func findFile(path string) map[string]string {
 	columns, err := rows.Columns()
 	if err != nil {
 		//panic(err.Error()) // proper error handling instead of panic in your app
-		l.Error(fmt.Sprintf("findFile get Columns error! %s", err.Error()))
+		fileLogger.Error(fmt.Sprintf("findFile get Columns error! %s", err.Error()))
 
 		return nil
 	}
@@ -636,7 +659,7 @@ func findFile(path string) map[string]string {
 	// Fetch rows
 	rows.Next()
 	if err = rows.Err(); err != nil {
-		l.Error(fmt.Sprintf("findFile rows.Next() error! %s", err.Error()))
+		fileLogger.Error(fmt.Sprintf("findFile rows.Next() error! %s", err.Error()))
 
 		return nil
 	}
@@ -706,13 +729,13 @@ func sendEmail(body string) error {
 	//	from, []string{to}, []byte(msg))
 
 	if err != nil {
-		l.Error(fmt.Sprintf("smtp error: %s", err))
+		fileLogger.Error(fmt.Sprintf("smtp error: %s", err))
 
 		return err
 	}
 
 	if DEBUG {
-		l.Debug(fmt.Sprintf("Email send successful."))
+		fileLogger.Debug(fmt.Sprintf("Email send successful."))
 	}
 
 	return nil

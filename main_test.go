@@ -17,7 +17,7 @@ import (
 
 var testConfigFileName = "test_config.yaml"
 var testConfigContent = `scanDir: /bin, /sbin
-excludeDir: .git
+excludeDir:
 excludeFile: .gitignore
 diffExtension: go, php
 storeDriver: mysql
@@ -29,12 +29,8 @@ notification:
   pass: password
   from: account@gmail.com
   to: to@gmail.com
-mysql:
-  Protocol: tcp
-  host: localhost
-  username: root
-  password:
-  database: filesmd5`
+sqlite:
+  file: testdb.db`
 
 func createConfigFileForTest() {
 
@@ -58,6 +54,128 @@ func deleteTestConfigFile() {
 //	os.Exit(retCode)
 //}
 
+func TestCreateLogFileWithDefault(t *testing.T) {
+	DEBUG = false
+	conf = config.New()
+
+	createLogFile("")
+
+	assert.NotNil(t, fileLogger)
+
+	usr, err := user.Current()
+	assert.NoError(t, err)
+
+	d, err := os.Open(usr.HomeDir + "/FileChecker")
+	defer d.Close()
+	assert.NoError(t, err)
+
+	fileLogger.Info("test")
+
+	f, err := os.Open(usr.HomeDir + "/FileChecker/FileChecker.log")
+	defer f.Close()
+	assert.NoError(t, err)
+
+	content, err := ioutil.ReadAll(f)
+	assert.NoError(t, err)
+	//assert.Equal(t, "test", string(content))
+	assert.Regexp(t, regexp.MustCompile(`\[INFO\].*test`), string((content)))
+
+	os.Remove(usr.HomeDir + "/FileChecker/FileChecker.log")
+	os.Remove(usr.HomeDir + "/FileChecker")
+
+	fileLogger = nil
+}
+
+func TestCreateLogFileWithDebugDefault(t *testing.T) {
+	DEBUG = true
+	conf = config.New()
+
+	createLogFile("")
+	assert.NotNil(t, fileLogger)
+
+	usr, err := user.Current()
+	assert.NoError(t, err)
+
+	d, err := os.Open(usr.HomeDir + "/FileChecker")
+	defer d.Close()
+	assert.NoError(t, err)
+
+	fileLogger.Debug("test")
+
+	f, err := os.Open(usr.HomeDir + "/FileChecker/debug.log")
+	defer f.Close()
+	assert.NoError(t, err)
+
+	content, err := ioutil.ReadAll(f)
+	assert.NoError(t, err)
+	//assert.Equal(t, "test", string(content))
+	assert.Regexp(t, regexp.MustCompile(`\[DEBUG\].*test`), string((content)))
+
+	os.Remove(usr.HomeDir + "/FileChecker/debug.log")
+	os.Remove(usr.HomeDir + "/FileChecker")
+
+	fileLogger = nil
+}
+
+func TestCreateLogFileWithConfig(t *testing.T) {
+	DEBUG = false
+
+	usr, err := user.Current()
+	assert.NoError(t, err)
+
+	c := map[interface{}]interface{}{
+		"logPath": usr.HomeDir + "/testlog.log",
+	}
+	conf = config.New(c)
+
+	createLogFile("")
+	assert.NotNil(t, fileLogger)
+
+	fileLogger.Info("test")
+
+	f, err := os.Open(usr.HomeDir + "/testlog.log")
+	defer f.Close()
+	assert.NoError(t, err)
+
+	content, err := ioutil.ReadAll(f)
+	assert.NoError(t, err)
+	//assert.Equal(t, "test", string(content))
+	assert.Regexp(t, regexp.MustCompile(`\[INFO\].*test`), string((content)))
+
+	os.Remove(usr.HomeDir + "/testlog.log")
+
+	fileLogger = nil
+}
+
+func TestCreateLogFileWithFlag(t *testing.T) {
+	DEBUG = true
+	conf = config.New()
+
+	usr, err := user.Current()
+	assert.NoError(t, err)
+
+	filePath := usr.HomeDir + "/flaglog.log"
+
+	createLogFile(filePath)
+	assert.NotNil(t, fileLogger)
+
+	fileLogger.Info("test")
+
+	f, err := os.Open(filePath)
+	defer f.Close()
+	assert.NoError(t, err)
+
+	content, err := ioutil.ReadAll(f)
+	assert.NoError(t, err)
+	//assert.Equal(t, "test", string(content))
+	assert.Regexp(t, regexp.MustCompile(`\[INFO\].*test`), string((content)))
+
+	os.Remove(filePath)
+
+	// keep the logger object
+	//fileLogger = nil
+}
+
 func TestReadConfig(t *testing.T) {
 	createConfigFileForTest()
 	defer deleteTestConfigFile()
@@ -66,13 +184,45 @@ func TestReadConfig(t *testing.T) {
 	assert.Equal(t, "/bin, /sbin", conf.GetString("scanDir"))
 
 	assert.Equal(t, strings.Split(conf.GetString("scanDir"), ","), scanDir)
+
+	// test exclude dir length is 0
+	assert.Equal(t, 0, len(excludeDir))
 }
 
 func TestConnectDbFailed(t *testing.T) {
 
-	err := connectDb("user", "pass", "dbname")
+	err := connectDb("/test.db")
 
 	assert.Error(t, err)
+}
+
+func TestGetDbFileName(t *testing.T) {
+	// test get file name from config
+	name := getDbFileName()
+	expect, _ := getAbsPath("testdb.db")
+	assert.Equal(t, strings.TrimRight(expect, "/"), name)
+
+	// test default db file name
+	conf = nil
+
+	// read empty config
+	ioutil.WriteFile("empty.yaml", []byte(""), 0644)
+	readConfig("empty.yaml")
+
+	name = getDbFileName()
+	assert.Equal(t, getHomeDir()+"/FileChecker.db", name)
+
+	os.Remove("empty.yaml")
+}
+
+func TestInitDb(t *testing.T) {
+	db = nil
+	initDb("gotest.db")
+
+	_, err := os.Stat("gotest.db")
+	assert.NoError(t, err)
+
+	os.Remove("gotest.db")
 }
 
 func TestScanDirEmpty(t *testing.T) {
@@ -116,7 +266,7 @@ func TestScanDirEmpty(t *testing.T) {
 func TestGetMd5(t *testing.T) {
 	createConfigFileForTest()
 
-	l = logger.New("/dev/null")
+	fileLogger = logger.New("/dev/null")
 
 	var returnMD5String string
 	file, err := os.Open(testConfigFileName)
@@ -169,125 +319,4 @@ func TestInSlice(t *testing.T) {
 
 	// test can not search
 	assert.Equal(t, false, inSlice("abcd", testSlice))
-}
-
-func TestCreateLogFileWithDefault(t *testing.T) {
-	DEBUG = false
-	conf = config.New()
-
-	createLogFile("")
-
-	assert.NotNil(t, l)
-
-	usr, err := user.Current()
-	assert.NoError(t, err)
-
-	d, err := os.Open(usr.HomeDir + "/FileChecker")
-	defer d.Close()
-	assert.NoError(t, err)
-
-	l.Info("test")
-
-	f, err := os.Open(usr.HomeDir + "/FileChecker/FileChecker.log")
-	defer f.Close()
-	assert.NoError(t, err)
-
-	content, err := ioutil.ReadAll(f)
-	assert.NoError(t, err)
-	//assert.Equal(t, "test", string(content))
-	assert.Regexp(t, regexp.MustCompile(`\[INFO\].*test`), string((content)))
-
-	os.Remove(usr.HomeDir + "/FileChecker/FileChecker.log")
-	os.Remove(usr.HomeDir + "/FileChecker")
-
-	l = nil
-}
-
-func TestCreateLogFileWithDebugDefault(t *testing.T) {
-	DEBUG = true
-	conf = config.New()
-
-	createLogFile("")
-	assert.NotNil(t, l)
-
-	usr, err := user.Current()
-	assert.NoError(t, err)
-
-	d, err := os.Open(usr.HomeDir + "/FileChecker")
-	defer d.Close()
-	assert.NoError(t, err)
-
-	l.Debug("test")
-
-	f, err := os.Open(usr.HomeDir + "/FileChecker/debug.log")
-	defer f.Close()
-	assert.NoError(t, err)
-
-	content, err := ioutil.ReadAll(f)
-	assert.NoError(t, err)
-	//assert.Equal(t, "test", string(content))
-	assert.Regexp(t, regexp.MustCompile(`\[DEBUG\].*test`), string((content)))
-
-	os.Remove(usr.HomeDir + "/FileChecker/debug.log")
-	os.Remove(usr.HomeDir + "/FileChecker")
-
-	l = nil
-}
-
-func TestCreateLogFileWithConfig(t *testing.T) {
-	DEBUG = false
-
-	usr, err := user.Current()
-	assert.NoError(t, err)
-
-	c := map[interface{}]interface{}{
-		"logPath": usr.HomeDir + "/testlog.log",
-	}
-	conf = config.New(c)
-
-	createLogFile("")
-	assert.NotNil(t, l)
-
-	l.Info("test")
-
-	f, err := os.Open(usr.HomeDir + "/testlog.log")
-	defer f.Close()
-	assert.NoError(t, err)
-
-	content, err := ioutil.ReadAll(f)
-	assert.NoError(t, err)
-	//assert.Equal(t, "test", string(content))
-	assert.Regexp(t, regexp.MustCompile(`\[INFO\].*test`), string((content)))
-
-	os.Remove(usr.HomeDir + "/testlog.log")
-
-	l = nil
-}
-
-func TestCreateLogFileWithFlag(t *testing.T) {
-	DEBUG = true
-	conf = config.New()
-
-	usr, err := user.Current()
-	assert.NoError(t, err)
-
-	filePath := usr.HomeDir + "/flaglog.log"
-
-	createLogFile(filePath)
-	assert.NotNil(t, l)
-
-	l.Info("test")
-
-	f, err := os.Open(filePath)
-	defer f.Close()
-	assert.NoError(t, err)
-
-	content, err := ioutil.ReadAll(f)
-	assert.NoError(t, err)
-	//assert.Equal(t, "test", string(content))
-	assert.Regexp(t, regexp.MustCompile(`\[INFO\].*test`), string((content)))
-
-	os.Remove(filePath)
-
-	l = nil
 }
