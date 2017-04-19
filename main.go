@@ -71,21 +71,6 @@ func main() {
 			Usage: "Config file location",
 		},
 		cli.StringFlag{
-			Name:  "username, u",
-			Value: "",
-			Usage: "MySQL username",
-		},
-		cli.StringFlag{
-			Name:  "password, p",
-			Value: "",
-			Usage: "MySQL user password",
-		},
-		cli.StringFlag{
-			Name:  "database, db",
-			Value: "",
-			Usage: "MySQL database name",
-		},
-		cli.StringFlag{
 			Name:  "log",
 			Value: "",
 			Usage: "Set log file location.",

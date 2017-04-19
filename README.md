@@ -8,21 +8,14 @@ And send notification when some files have been changed by another one.
 
 * Generate md5 for any files.
 * Support recursive scan all sub folders.
-* Store in MySQL.
+* Store in sqlite.
 * Notifycation by E-mail.
 * Print diff string in notification.
-* *Next will support sqlite
 
 ## Install
 
 ```
 go get github.com/unknowPaper/FileChecker/...
-```
-
-Install mysql schema
-
-```
-FileChecker -u MYSQLUSER -p MYSQLPASS --db MYSQLDBNAME install
 ```
 
 ## Usage
@@ -42,9 +35,6 @@ GLOBAL OPTIONS:
    --dirictory value, -d value   Scan directory location
    --recursive, -r               Scan recursively
    --config value, --cfg value   Config file location (default: "config.yaml")
-   --username value, -u value    MySQL username
-   --password value, -p value    MySQL user password
-   --database value, --db value  MySQL database name
    --log value                   Set log file location.
    --debug                       Enable debug mode
    --help, -h                    show help
@@ -71,12 +61,8 @@ notification:
   pass: password
   from: account@gmail.com
   to: to@gmail.com
-mysql:
-  Protocol: tcp
-  host: localhost
-  username: root
-  password:
-  database: filesmd5
+sqlite:
+  file: test.db
 ```
 
 You can use --cfg flag to set config location.
@@ -88,7 +74,7 @@ FileChecker --cfg /your/config/location
 Or use flag to set mysql username and password
 
 ```
-FileChecker -r -d "/bin, /sbin" -u root -p 123456 --db filesmd5 scan
+FileChecker -r -d "/bin, /sbin" scan
 ```
 
 
