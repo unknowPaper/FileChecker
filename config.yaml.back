@@ -2,7 +2,6 @@ scanDir: /bin, /sbin
 excludeDir: .git
 excludeFile: .gitignore
 diffExtension: go, php
-storeDriver: mysql
 logPath: mylog.log
 notification:
   smtp: smtp.gmail.com
@@ -11,9 +10,5 @@ notification:
   pass: password
   from: account@gmail.com
   to: to@gmail.com
-mysql:
-  Protocol: tcp
-  host: localhost
-  username: root
-  password:
-  database: filesmd5
+sqlite:
+  file: test.db
