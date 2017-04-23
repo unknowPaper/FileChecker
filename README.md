@@ -29,7 +29,7 @@ COMMANDS:
      help, h    Shows a list of commands or help for one command
 ```
 
-#### All Flags (options)
+#### All Flags
 ```
 GLOBAL OPTIONS:
    --dirictory value, -d value   Scan directory location
@@ -41,9 +41,7 @@ GLOBAL OPTIONS:
    --version, -v                 print the version
 ```
 
-#### Step 1 - Edit config
-
-You must set mysql username and password using yaml format config file or flags.
+#### Step 1 - Edit config (optional)
 
 All config example:
 
@@ -71,12 +69,13 @@ You can use --cfg flag to set config location.
 FileChecker --cfg /your/config/location
 ```
 
-Or use flag to set mysql username and password
+Or use flag to set scan directory
 
 ```
 FileChecker -r -d "/bin, /sbin" scan
 ```
 
+##### Default log and sqlite database locate at $HOME/FileChecker
 
 #### Step 2 - Run scan
 
