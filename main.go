@@ -201,7 +201,7 @@ func initDb(dbFile string) error {
 		return cli.NewExitError(err.Error(), 98)
 	}
 
-	fileLogger.Info("Install success.")
+	fileLogger.Info(fmt.Sprintf("Install sqlite at %s success.", dbFile))
 
 	return nil
 }
@@ -563,9 +563,12 @@ func getContent(f *os.File, path string) string {
 	content := ""
 
 	if len(diffFileExtension) != 0 {
-		var re = regexp.MustCompile("^.*[" + strings.Join(diffFileExtension, "|") + "]\\/?$")
+		var re = regexp.MustCompile("^.*\\.(" + strings.Join(diffFileExtension, "|") + ")$")
 
 		if re.MatchString(path) {
+			if DEBUG {
+				fileLogger.Debug(fmt.Sprintf("file %s diffFileExtension: %v", f.Name(), diffFileExtension))
+			}
 			content = getRealContent(f)
 		}
 	}
