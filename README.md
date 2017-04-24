@@ -2,15 +2,25 @@
 
 This tool can help you check your system files stay there original checksum.
 
-And send notification when some files have been changed by another one.
+And send notification when some files have been changed.
 
 ## Features
 
-* Generate md5 for any files.
+* Generate md5 hash for any files.
 * Support recursive scan all sub folders.
 * Store in sqlite.
 * Notifycation by E-mail.
 * Print diff string in notification.
+
+## Why use this tool
+
+The cracker will put backdoor after cracked a server.
+
+Maybe upload a new file or change binary with virus.
+
+So stay the origin hash is necessary.
+
+This tool can help you to do this work.
 
 ## Install
 
