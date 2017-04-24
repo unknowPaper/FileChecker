@@ -25,7 +25,7 @@ This tool can help you to do this work.
 ## Install
 
 ```
-go get github.com/unknowPaper/FileChecker/...
+go get -u github.com/unknowPaper/FileChecker/...
 ```
 
 ## Usage
@@ -117,6 +117,10 @@ FileChecker -r check
 
 ```
 FileChecker -r -d /usr/sbin check
+```
+
+```
+FileChecker -r -d /usr/sbin  --cfg /config/location check
 ```
 
 #### Step 4 - Renew
